@@ -208,6 +208,7 @@ The fields listed above are consistently available for each post across the samp
 ### Summary
 - The presence of these sections is not guaranteed for every case. Always check for their existence and extract all available details when present.
 - For robust extraction, search for widgets, headings, or sections with keywords like 'comment', 'related', or 'similar' in the class, id, or heading text.
+<<<<<<< HEAD
 
 ## Phase 2 Implementation Details
 
@@ -268,3 +269,5 @@ The parser extracts 23 fields per judgment:
 3. Run Phase 2: `python main.py 2`
 4. Monitor progress and check `extracted_data/extracted_judgments.csv` for results
 5. Review `error_log.txt` for any processing issues
+=======
+>>>>>>> a38a326e4537e4e3a6d7515707b7ccab85920a12
