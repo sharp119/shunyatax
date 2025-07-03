@@ -4,79 +4,90 @@ import os
 import csv
 import time
 import random
-import uuid
-from config import MIN_RATE_LIMIT_DELAY, MAX_RATE_LIMIT_DELAY
+import hashlib
+import json
+import logging # Import the logging module
 
-def generate_unique_id():
-    """Generates a unique hexadecimal ID for a post."""
-    return uuid.uuid4().hex
-
-def save_html(filepath, content):
-    """Saves HTML content to a file, creating parent directories if needed."""
-    try:
-        os.makedirs(os.path.dirname(filepath), exist_ok=True)
-        with open(filepath, 'w', encoding='utf-8') as f:
-            f.write(content)
-        print(f"Successfully saved to {filepath}")
-    except IOError as e:
-        print(f"Error saving file {filepath}: {e}")
-
-def update_ledger(ledger_file, unique_id, file_path, post_url):
-    """Appends a new record to the ledger CSV file."""
-    try:
-        with open(ledger_file, 'a', newline='', encoding='utf-8') as f:
-            writer = csv.writer(f)
-            # Write header if the file is new/empty
-            if f.tell() == 0:
-                writer.writerow(['unique_id', 'file_path', 'post_url'])
-            writer.writerow([unique_id, file_path, post_url])
-    except IOError as e:
-        print(f"Error updating ledger {ledger_file}: {e}")
-
-def load_progress(progress_file):
-    """Loads the last scraped page for each category from the progress tracker."""
-    if not os.path.exists(progress_file):
-        return {}
-    
-    progress = {}
-    try:
-        with open(progress_file, 'r', encoding='utf-8') as f:
-            reader = csv.reader(f)
-            next(reader, None) # Skip header
-            for row in reader:
-                if row:
-                    progress[row[0]] = int(row[1])
-    except (IOError, IndexError) as e:
-        print(f"Could not read progress file {progress_file}, starting from scratch. Error: {e}")
-        return {}
+# Configure logging
+def setup_logging():
+    log_file = 'project.log'
+    # Clear log file from previous run for cleaner output, or change to 'a' to append
+    if os.path.exists(log_file):
+        open(log_file, 'w').close() 
         
+    logging.basicConfig(
+        level=logging.INFO, # Set overall logging level to INFO
+        format='%(asctime)s - %(levelname)s - %(message)s',
+        handlers=[
+            logging.FileHandler(log_file), # Log to a file
+            logging.StreamHandler()        # Log to console
+        ]
+    )
+    logging.getLogger('tqdm').setLevel(logging.WARNING) # Suppress tqdm's own logging messages
+
+def generate_unique_id(url):
+    """Generates a unique ID based on the URL."""
+    return hashlib.md5(url.encode('utf-8')).hexdigest()
+
+def load_ledger():
+    """Loads all entries from ledger.csv."""
+    ledger_file = 'ledger.csv'
+    entries = []
+    if os.path.exists(ledger_file) and os.path.getsize(ledger_file) > 0:
+        with open(ledger_file, 'r', newline='', encoding='utf-8') as f:
+            reader = csv.DictReader(f)
+            # Check if 'unique_id' is in the fieldnames to avoid KeyError later
+            if 'unique_id' not in reader.fieldnames:
+                logging.error(f"Ledger file '{ledger_file}' is missing 'unique_id' column in header. Please ensure it's correctly formatted.")
+                return [] # Return empty list if header is bad
+            for row in reader:
+                entries.append(row)
+    logging.info(f"Loaded {len(entries)} entries from ledger.")
+    return entries
+
+def load_progress():
+    """Loads progress from progress_tracker.csv."""
+    progress_file = 'progress_tracker.csv'
+    progress = {}
+    if os.path.exists(progress_file) and os.path.getsize(progress_file) > 0:
+        with open(progress_file, 'r', newline='', encoding='utf-8') as f:
+            reader = csv.reader(f)
+            header = next(reader, None)
+            if header: # Ensure header exists
+                for row in reader:
+                    if len(row) == 2:
+                        progress[row[0]] = int(row[1])
+    logging.info("Progress loaded.")
     return progress
 
-def update_progress(progress_file, category, page_number):
-    """Updates the progress tracker with the last successfully scraped page."""
-    progress = load_progress(progress_file)
-    progress[category] = page_number
+def update_progress(category_name, page_number):
+    """Updates the progress_tracker.csv for a given category."""
+    progress_file = 'progress_tracker.csv'
+    progress = load_progress()
+    progress[category_name] = page_number
     
-    try:
-        with open(progress_file, 'w', newline='', encoding='utf-8') as f:
-            writer = csv.writer(f)
-            writer.writerow(['category', 'last_page'])
-            for cat, page in progress.items():
-                writer.writerow([cat, page])
-    except IOError as e:
-        print(f"Error updating progress file {progress_file}: {e}")
+    with open(progress_file, 'w', newline='', encoding='utf-8') as f:
+        writer = csv.writer(f)
+        writer.writerow(['category', 'last_page'])
+        for cat, page in progress.items():
+            writer.writerow([cat, page])
+    logging.info(f"Updated progress for {category_name} to page {page_number}")
 
-def log_error(error_log_file, url, message):
-    """Logs a persistent fetch error to the error log file."""
-    timestamp = time.strftime("%Y-%m-%d %H:%M:%S")
-    try:
-        with open(error_log_file, 'a', encoding='utf-8') as f:
-            f.write(f"{timestamp} - URL: {url} - Error: {message}\n")
-    except IOError as e:
-        print(f"Critical error: Could not write to log file {error_log_file}. Error: {e}")
+# Removed log_error functions, use logging.error directly
 
-def polite_pause():
-    """Pauses execution for a random interval to be polite to the server."""
-    delay = random.uniform(MIN_RATE_LIMIT_DELAY, MAX_RATE_LIMIT_DELAY)
-    print(f"Pausing for {delay:.2f} seconds...")
-    time.sleep(delay)
+def get_random_sleep_interval():
+    """Returns a random sleep interval between 2 and 8 seconds."""
+    interval = random.uniform(2, 8)
+    logging.debug(f"Sleeping for {interval:.2f} seconds.")
+    return interval
+
+def add_to_ledger(unique_id, file_path, post_url):
+    """Appends an entry to the ledger CSV."""
+    ledger_file = 'ledger.csv'
+    mode = 'a' if os.path.exists(ledger_file) and os.path.getsize(ledger_file) > 0 else 'w' # Check if file has content
+    with open(ledger_file, mode, newline='', encoding='utf-8') as f:
+        writer = csv.writer(f)
+        if mode == 'w':
+            writer.writerow(['unique_id', 'file_path', 'post_url'])
+        writer.writerow([unique_id, file_path, post_url])
+    logging.debug(f"Added to ledger: {unique_id}") # Use logging.debug for less critical info

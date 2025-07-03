@@ -1,5 +1,7 @@
 # shunyatax/config.py
 
+import os
+
 # -- Categories and URLs --
 # Categories to be scraped, matching the URL slugs
 CATEGORIES = [
@@ -31,7 +33,15 @@ REQUEST_TIMEOUT = 15
 MIN_RATE_LIMIT_DELAY = 2
 MAX_RATE_LIMIT_DELAY = 8
 
+# Maximum number of concurrent workers for Phase 1
+MAX_WORKERS = 5
+
 # -- File and Folder Configuration --
+# Base directory for data storage (relative to project root)
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+DATA_DIR = os.path.join(BASE_DIR, 'data')
+OUTPUT_DIR = os.path.join(BASE_DIR, 'extracted_data')
+
 # Name of the CSV file to track all scraped posts
 LEDGER_FILE = "ledger.csv"
 
@@ -43,3 +53,8 @@ ERROR_LOG_FILE = "error_log.txt"
 
 # Folder to store the raw HTML responses
 DATA_FOLDER = "data"
+
+# Define extracted data file name
+EXTRACTED_DATA_FILE = 'extracted_judgments.csv'
+
+MAX_ENTRIES_PER_CSV = 100
